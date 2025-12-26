@@ -149,9 +149,20 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, result })
   } catch (error) {
-    console.error('Error sending Telegram message:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : undefined
+    
+    console.error('Error sending Telegram message:', {
+      message: errorMessage,
+      stack: errorStack,
+      error: error
+    })
+    
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+      },
       { status: 500 }
     )
   }
