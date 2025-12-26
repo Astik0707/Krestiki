@@ -392,18 +392,21 @@ export default function TicTacToe() {
     // Проверяем все возможные варианты
     console.log('handleGameEnd: определяем сообщение', { gameWinner, typeof: typeof gameWinner })
     
-    if (gameWinner === 'X' || gameWinner === 'x') {
+    if (gameWinner === 'X') {
       promoCode = generatePromoCode()
       telegramMessage = `Победа! Промокод выдан: ${promoCode}`
       console.log('handleGameEnd: победа X', { telegramMessage })
-    } else if (gameWinner === 'O' || gameWinner === 'o' || gameWinner === '0') {
+    } else if (gameWinner === 'O') {
       telegramMessage = 'Проигрыш'
       console.log('handleGameEnd: проигрыш O', { telegramMessage })
-    } else if (gameWinner === 'draw' || gameWinner === null) {
+    } else if (gameWinner === 'draw') {
       telegramMessage = 'Ничья!'
       console.log('handleGameEnd: ничья', { telegramMessage, gameWinner })
+    } else if (gameWinner === null) {
+      telegramMessage = 'Игра окончена!'
+      console.log('handleGameEnd: null', { telegramMessage })
     } else {
-      // Fallback для любых других случаев
+      // Fallback для любых других случаев (не должно происходить)
       console.warn('handleGameEnd: неизвестный gameWinner', { gameWinner, type: typeof gameWinner })
       telegramMessage = 'Игра окончена!'
     }
@@ -412,7 +415,7 @@ export default function TicTacToe() {
 
     setStats((prevStats) => {
       const newStats = { ...prevStats }
-      if (gameWinner === 'X' || gameWinner === 'x') {
+      if (gameWinner === 'X') {
         newStats.wins++
         setPromoCode(promoCode)
         setPromoHistory((prevHistory) => {
@@ -425,7 +428,7 @@ export default function TicTacToe() {
         setShowConfetti(true)
         setTimeout(() => setShowConfetti(false), 3000)
         playWinSound()
-      } else if (gameWinner === 'O' || gameWinner === 'o' || gameWinner === '0') {
+      } else if (gameWinner === 'O') {
         newStats.losses++
         playLoseSound()
       } else {
