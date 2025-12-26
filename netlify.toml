@@ -8,3 +8,7 @@
 [build.environment]
   NODE_VERSION = "18"
 
+# Для Next.js API routes
+[functions]
+  node_bundler = "esbuild"
+
