@@ -35,6 +35,7 @@ export default function TicTacToe() {
   
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
+  const telegramSentRef = useRef(false)
 
   // Инициализация AudioContext
   useEffect(() => {
@@ -161,6 +162,7 @@ export default function TicTacToe() {
 
         const gameResult = calculateWinner(updatedBoard)
         if (gameResult.winner) {
+          console.log('Таймер: игра окончена', gameResult)
           handleGameEnd(gameResult.winner, gameResult.line)
         }
       }, 500)
@@ -268,7 +270,13 @@ export default function TicTacToe() {
 
     for (const [a, b, c] of lines) {
       if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
-        return { winner: squares[a], line: [a, b, c] }
+        const winnerValue = squares[a]
+        console.log('calculateWinner: найден победитель', { 
+          winner: winnerValue, 
+          type: typeof winnerValue,
+          line: [a, b, c]
+        })
+        return { winner: winnerValue, line: [a, b, c] }
       }
     }
 
@@ -360,17 +368,55 @@ export default function TicTacToe() {
 
   // Обработка окончания игры
   const handleGameEnd = async (gameWinner: CellValue | 'draw', line: number[] | null) => {
+    // Проверяем, чтобы не обрабатывать окончание игры дважды
+    // Используем только ref, так как состояние может быть устаревшим
+    if (telegramSentRef.current) {
+      console.log('handleGameEnd: уже обработано, пропускаем')
+      return
+    }
+    
+    console.log('handleGameEnd: начинаем обработку', { 
+      gameWinner, 
+      line,
+      gameWinnerType: typeof gameWinner,
+      gameWinnerValue: JSON.stringify(gameWinner)
+    })
+    telegramSentRef.current = true
     setWinner(gameWinner)
     setWinningLine(line)
 
+    // Определяем сообщение ДО setStats, чтобы оно было доступно
+    let telegramMessage = ''
+    let promoCode = ''
+
+    // Проверяем все возможные варианты
+    console.log('handleGameEnd: определяем сообщение', { gameWinner, typeof: typeof gameWinner })
+    
+    if (gameWinner === 'X' || gameWinner === 'x') {
+      promoCode = generatePromoCode()
+      telegramMessage = `Победа! Промокод выдан: ${promoCode}`
+      console.log('handleGameEnd: победа X', { telegramMessage })
+    } else if (gameWinner === 'O' || gameWinner === 'o' || gameWinner === '0') {
+      telegramMessage = 'Проигрыш'
+      console.log('handleGameEnd: проигрыш O', { telegramMessage })
+    } else if (gameWinner === 'draw' || gameWinner === null) {
+      telegramMessage = 'Ничья!'
+      console.log('handleGameEnd: ничья', { telegramMessage, gameWinner })
+    } else {
+      // Fallback для любых других случаев
+      console.warn('handleGameEnd: неизвестный gameWinner', { gameWinner, type: typeof gameWinner })
+      telegramMessage = 'Игра окончена!'
+    }
+    
+    console.log('handleGameEnd: итоговое сообщение', { telegramMessage, length: telegramMessage.length })
+
     setStats((prevStats) => {
       const newStats = { ...prevStats }
-      if (gameWinner === 'X') {
+      if (gameWinner === 'X' || gameWinner === 'x') {
         newStats.wins++
-        const code = generatePromoCode()
-        setPromoCode(code)
+        setPromoCode(promoCode)
         setPromoHistory((prevHistory) => {
-          const newHistory = [...prevHistory, code]
+          const newHistory = [...prevHistory, promoCode]
           if (typeof window !== 'undefined') {
             localStorage.setItem('promoHistory', JSON.stringify(newHistory))
           }
@@ -379,15 +425,12 @@ export default function TicTacToe() {
         setShowConfetti(true)
         setTimeout(() => setShowConfetti(false), 3000)
         playWinSound()
-        sendTelegramMessage(`Победа! Промокод выдан: ${code}`)
-      } else if (gameWinner === 'O') {
+      } else if (gameWinner === 'O' || gameWinner === 'o' || gameWinner === '0') {
         newStats.losses++
         playLoseSound()
-        sendTelegramMessage('Проигрыш')
       } else {
         newStats.draws++
         playDrawSound()
-        sendTelegramMessage('Ничья!')
       }
 
       if (typeof window !== 'undefined') {
@@ -395,6 +438,14 @@ export default function TicTacToe() {
       }
       return newStats
     })
+
+    // Отправляем Telegram сообщение
+    if (telegramMessage) {
+      console.log('handleGameEnd: отправляем Telegram сообщение', telegramMessage)
+      await sendTelegramMessage(telegramMessage)
+    } else {
+      console.warn('handleGameEnd: telegramMessage пустое!', { gameWinner })
+    }
   }
 
   // Обработка клика по ячейке
@@ -411,6 +462,7 @@ export default function TicTacToe() {
 
     const gameResult = calculateWinner(newBoard)
     if (gameResult.winner) {
+      console.log('handleClick: игра окончена после хода игрока', gameResult)
       await handleGameEnd(gameResult.winner, gameResult.line)
       return
     }
@@ -428,6 +480,7 @@ export default function TicTacToe() {
 
       const gameResult = calculateWinner(updatedBoard)
       if (gameResult.winner) {
+        console.log('handleClick: игра окончена после хода компьютера', gameResult)
         handleGameEnd(gameResult.winner, gameResult.line)
       }
     }, difficulty === 'easy' ? 300 : difficulty === 'medium' ? 500 : 700)
@@ -443,6 +496,7 @@ export default function TicTacToe() {
     setIsComputerThinking(false)
     setTimeLeft(timerSeconds)
     setShowConfetti(false)
+    telegramSentRef.current = false
   }
 
   // Изменить Telegram ID

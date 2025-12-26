@@ -44,40 +44,63 @@ export async function POST(request: NextRequest) {
     console.log('Sending to Telegram:', { url: telegramUrl.replace(botToken, 'TOKEN_HIDDEN'), chatId: chatIdValue, message, isUsername })
 
     // Если это username, сначала попробуем получить chat_id через getUpdates
-    // Важно: getUpdates возвращает только последние обновления (обычно 100 за 24 часа)
-    // Если пользователь писал боту давно, его сообщение может быть не в обновлениях
+    // Пробуем получить все обновления, используя offset для получения всех сообщений
     if (isUsername && typeof chatIdValue === 'string') {
       try {
-        // Пробуем получить максимум обновлений (limit=100 - максимальное значение)
-        const updatesUrl = `https://api.telegram.org/bot${botToken}/getUpdates?limit=100`
-        const updatesResponse = await fetch(updatesUrl)
+        let foundChatId: number | null = null
+        let offset = 0
+        const limit = 100
         
-        if (updatesResponse.ok) {
-          const updatesData = await updatesResponse.json()
-          if (updatesData.ok && updatesData.result && updatesData.result.length > 0) {
-            // Ищем пользователя по username в обновлениях (проверяем с конца - самые свежие)
-            for (const update of updatesData.result.reverse()) {
-              if (update.message?.from) {
-                const user = update.message.from
-                // Проверяем username (без учета регистра)
-                if (user.username && user.username.toLowerCase() === chatIdValue.toLowerCase()) {
-                  chatIdValue = user.id
-                  console.log('Found chat_id for username from updates:', { username: chatId, chatId: chatIdValue })
-                  break
+        // Пробуем получить все обновления, делая несколько запросов если нужно
+        for (let attempt = 0; attempt < 5 && !foundChatId; attempt++) {
+          const updatesUrl = `https://api.telegram.org/bot${botToken}/getUpdates?limit=${limit}&offset=${offset}`
+          const updatesResponse = await fetch(updatesUrl)
+          
+          if (updatesResponse.ok) {
+            const updatesData = await updatesResponse.json()
+            if (updatesData.ok && updatesData.result && updatesData.result.length > 0) {
+              // Ищем пользователя по username в обновлениях
+              for (const update of updatesData.result) {
+                if (update.message?.from) {
+                  const user = update.message.from
+                  // Проверяем username (без учета регистра)
+                  if (user.username && user.username.toLowerCase() === chatIdValue.toLowerCase()) {
+                    foundChatId = user.id
+                    console.log('Found chat_id for username from updates:', { username: chatId, chatId: foundChatId })
+                    break
+                  }
+                }
+                if (update.message?.chat) {
+                  const chat = update.message.chat
+                  if (chat.username && chat.username.toLowerCase() === chatIdValue.toLowerCase()) {
+                    foundChatId = chat.id
+                    console.log('Found chat_id for username from chat:', { username: chatId, chatId: foundChatId })
+                    break
+                  }
+                }
+                // Обновляем offset для следующего запроса
+                if (update.update_id >= offset) {
+                  offset = update.update_id + 1
                 }
               }
-              if (update.message?.chat) {
-                const chat = update.message.chat
-                if (chat.username && chat.username.toLowerCase() === chatIdValue.toLowerCase()) {
-                  chatIdValue = chat.id
-                  console.log('Found chat_id for username from chat:', { username: chatId, chatId: chatIdValue })
-                  break
-                }
-              }
+              
+              // Если нашли, выходим из цикла
+              if (foundChatId) break
+              
+              // Если получили меньше обновлений чем limit, значит больше нет
+              if (updatesData.result.length < limit) break
+            } else {
+              break
             }
           } else {
-            console.log('No updates found in getUpdates, will try username directly')
+            break
           }
+        }
+        
+        if (foundChatId) {
+          chatIdValue = foundChatId
+        } else {
+          console.log('Could not find chat_id for username in updates, will try username directly')
         }
       } catch (e) {
         console.log('Could not get chat_id from updates, will try username directly:', e)
